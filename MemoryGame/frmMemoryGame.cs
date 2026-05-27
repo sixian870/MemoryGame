@@ -8,7 +8,6 @@ using System.Media;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Text;
 
 namespace MemoryGame
 {
@@ -27,12 +26,13 @@ namespace MemoryGame
 
         private Image BackImage = Properties.Resources.card_back;
         [System.Runtime.InteropServices.DllImport("winmm.dll")]
+
         private static extern long mciSendString(string strCommand, StringBuilder strReturn, int iReturnLength, IntPtr hwndCallback);
 
-        // 用來記錄每個獨立播放軌道的 ID
         int soundIdCounter = 0;
-        // 用來記錄釋放後的實體音檔路徑
         Dictionary<string, string> soundPathCache = new Dictionary<string, string>();
+
+        int originalLv2Width = 0;
 
         public frmMemoryGame()
         {
@@ -41,92 +41,128 @@ namespace MemoryGame
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            originalLv2Width = btnLv2.Width;
+            PreloadAllSounds(new string[] { "click_flip", "match_success", "match_fail", "next_level", "game_fail", "surprise", "game_clear" });
+            pnlWelcome.BringToFront();
+            pnlWelcome.Visible = true;
+            pnlGameOver.Visible = false;
+
+        }
+
+        private void btnStartGame_Click(object sender, EventArgs e)
+        {
+            PlaySound("click_flip");
+            pnlWelcome.Visible = false;
             StartLevel(1);
         }
 
-        /// <summary>
-        /// 核心方法：初始化並啟動指定關卡
-        /// </summary>
+        #region 關卡設定
         private void StartLevel(int level)
         {
             currentLevel = level;
             firstClick = null;
             secondClick = null;
-            lockClick = false;
+            lockClick = true;
 
-            // 目前關卡亮起，其餘變灰
-            btnLv1.Enabled = (level == 1);
-            btnLv2.Enabled = (level == 2);
-            btnLv3.Enabled = (level == 3);
-
-            btnLv1.BackColor = (level == 1) ? Color.DarkSeaGreen : Color.LightGray;
-            btnLv2.BackColor = (level == 2) ? Color.DarkSeaGreen : Color.LightGray;
-            btnLv3.BackColor = (level == 3) ? Color.DarkSeaGreen : Color.LightGray;
-
-            btnLv1.ForeColor = (level == 1) ? Color.White : Color.Black;
-            btnLv2.ForeColor = (level == 2) ? Color.White : Color.Black;
-            btnLv3.ForeColor = (level == 3) ? Color.White : Color.Black;
-
-            // 依關卡決定網格大小與限時
             int rows = 4, cols = 4;
-            if (level == 1) { rows = 4; cols = 4; maxTime = 120; }       // 4x4 限時 120 秒
-            else if (level == 2) { rows = 6; cols = 6; maxTime = 300; }  // 6x6 限時 300 秒
-            else if (level == 3) { rows = 8; cols = 8; maxTime = 900; }  // 8x8 限時 900 秒
-            else if (level == 4) { rows = 10; cols = 10; maxTime = 0; }  // 10x10 正向計時
-
-            remainingPairs = (rows * cols) / 2;
-
-            // 設定計時模式與介面文字
             if (level == 4)
             {
-                timeLeft = 0; // 從 0 秒開始正向計時
-                timeBar.Maximum = 1500;
-                timeBar.Value = 0; // 隱藏關進度條全滿當裝飾
-                lblTime.Text = "⏱️ 已用時間：";
-                lblRemaining.Text = $"剩餘：{remainingPairs} 未配對";
-                this.Text = "終極隱藏關卡";
+                this.BackColor = Color.RosyBrown;
+                pnlGame.BackColor = Color.RosyBrown;
+                gamePanel.BackColor = Color.RosyBrown;
 
+                btnLv1.Visible = false;
+                btnLv3.Visible = false;
+                btnLv2.Enabled = true;
+                btnLv2.Text = "終極隱藏關卡";
+                btnLv2.ForeColor = Color.White;
+                btnLv2.BackColor = Color.Maroon;
+                btnRestart.BackColor = Color.Maroon;
+                btnRestart.ForeColor = Color.White;
+                lblRemaining.ForeColor = Color.Maroon;
+                lbls.ForeColor = Color.Maroon;
+                lblTime.ForeColor = Color.Maroon;
+
+                // 進度條 紅色,正向計時
+                timeLeft = 0;
+                timeBar.Maximum = 1500;
+                timeBar.Value = 0;
+                try { NativeMethods.SendMessage(timeBar.Handle, 0x410, (IntPtr)2, IntPtr.Zero); } catch { }
+
+                lblTime.Text = "⏱️ 已用時間：";
+                this.Text = "💀 終極隱藏關卡 💀";
             }
             else
             {
+                this.BackColor = Color.Honeydew;
+                pnlGame.BackColor = Color.Honeydew;
+                gamePanel.BackColor = Color.Honeydew;
+                lblRemaining.ForeColor = Color.Black;
+                lbls.ForeColor = Color.Black;
+                lblTime.ForeColor = Color.Black;
+                btnRestart.BackColor = Color.DarkSeaGreen;
+                btnRestart.ForeColor = Color.White;
+
+                btnLv1.Visible = true;
+                btnLv3.Visible = true;
+                btnLv2.Text = "▶️ 第二關 6x6";
+
+                btnLv1.Enabled = (level == 1);
+                btnLv2.Enabled = (level == 2);
+                btnLv3.Enabled = (level == 3);
+
+                btnLv1.BackColor = (level == 1) ? Color.DarkSeaGreen : Color.LightGray;
+                btnLv2.BackColor = (level == 2) ? Color.DarkSeaGreen : Color.LightGray;
+                btnLv3.BackColor = (level == 3) ? Color.DarkSeaGreen : Color.LightGray;
+
+                btnLv1.ForeColor = (level == 1) ? Color.White : Color.Black;
+                btnLv2.ForeColor = (level == 2) ? Color.White : Color.Black;
+                btnLv3.ForeColor = (level == 3) ? Color.White : Color.Black;
+
+                // 依關卡決定網格大小與限時
+                if (level == 1) { rows = 4; cols = 4; maxTime = 120; }
+                else if (level == 2) { rows = 6; cols = 6; maxTime = 300; }
+                else if (level == 3) { rows = 8; cols = 8; maxTime = 900; }
+
                 timeLeft = maxTime;
                 timeBar.Maximum = maxTime;
                 timeBar.Value = maxTime;
+
+                // 發送底層訊息，還原綠色進度條
+                try { NativeMethods.SendMessage(timeBar.Handle, 0x410, (IntPtr)1, IntPtr.Zero); } catch { }
+
                 lblTime.Text = "⏱️ 剩餘時間：";
-                lblRemaining.Text = $"剩餘: {remainingPairs} 未配對";
+                this.Text = "記憶翻牌小遊戲";
             }
 
-            // 清空舊的畫面與資料
+            remainingPairs = (rows * cols) / 2;
+            lblRemaining.Text = $"剩餘: {remainingPairs} 未配對";
+
+            // 清空舊的畫面與網格配置
             gamePanel.Controls.Clear();
             gamePanel.RowStyles.Clear();
             gamePanel.ColumnStyles.Clear();
             pics.Clear();
             images.Clear();
 
-            // 網格
             gamePanel.RowCount = rows;
             gamePanel.ColumnCount = cols;
             for (int i = 0; i < rows; i++) gamePanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / rows));
             for (int i = 0; i < cols; i++) gamePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / cols));
 
-            // 隨機打亂 1~50 的數字，確保每場抽到的牌種類不重複
             List<int> imgIndexes = Enumerable.Range(1, 50).ToList();
             Random rand = new Random();
             imgIndexes = imgIndexes.OrderBy(x => rand.Next()).ToList();
 
             for (int i = 0; i < remainingPairs; i++)
             {
-                // 根據隨機排序的數字，抓取 card_X
                 string resName = "card_" + imgIndexes[i];
                 Image img = (Image)Properties.Resources.ResourceManager.GetObject(resName);
-                if (img != null)
-                {
-                    images.Add(img);
-                }
+                if (img != null) images.Add(img);
             }
-            images.AddRange(images); // 複製一份，達成兩兩配對
+            images.AddRange(images); // 複製一份
 
-            // 產生 PictureBox 加入網格
+            // 產生 PictureBox 並塞入網格
             for (int r = 0; r < rows; r++)
             {
                 for (int c = 0; c < cols; c++)
@@ -136,7 +172,7 @@ namespace MemoryGame
                     p.SizeMode = PictureBoxSizeMode.Zoom;
                     p.Image = BackImage;
                     p.Margin = new Padding(4);
-                    p.Click += pic_Click; // 綁定點擊事件
+                    p.Click += pic_Click;
 
                     pics.Add(p);
                     gamePanel.Controls.Add(p, c, r);
@@ -152,11 +188,30 @@ namespace MemoryGame
                 images.RemoveAt(index);
             }
 
-            // 啟動計時器
-            timer1.Interval = 1000;
-            timer1.Start();
-        }
+            // 偷看 1s
+            timer1.Stop(); // 攤牌期間先停止計時
+            foreach (PictureBox p in pics)
+            {
+                p.Image = (Image)p.Tag; // 強制顯示正面
+            }
 
+            Task.Delay(1000).ContinueWith(t =>
+            {
+                this.Invoke((MethodInvoker)delegate
+                {
+                    foreach (PictureBox p in pics)
+                    {
+                        p.Image = BackImage; // 全部翻回去
+                    }
+                    lockClick = false;
+                    timer1.Interval = 1000;
+                    timer1.Start(); // 啟動計時時鐘
+                });
+            });
+        }
+        #endregion
+
+        #region 點擊規則
         private void pic_Click(object sender, EventArgs e)
         {
             PictureBox pic = sender as PictureBox;
@@ -200,7 +255,9 @@ namespace MemoryGame
                 CheckWin();
             }
         }
+        #endregion
 
+        #region 計時器
         // 延遲一秒
         private void timer2_Tick(object sender, EventArgs e)
         {
@@ -236,11 +293,14 @@ namespace MemoryGame
             {
                 timer1.Stop();
                 lockClick = true;
+                PlaySound("game_fail");
                 MessageBox.Show("⏰ 時間到！挑戰失敗，再試一次吧！", "遊戲結束");
                 StartLevel(currentLevel); // 失敗則重來本關
             }
         }
+        #endregion
 
+        #region 檢查贏
         private void CheckWin()
         {
             if (remainingPairs == 0)
@@ -260,52 +320,74 @@ namespace MemoryGame
                     // 如果剩餘時間大於 200 秒，觸發隱藏關卡！
                     if (timeLeft > 200)
                     {
-                        PlaySound("next_level");
-
-                        DialogResult result = MessageBox.Show(
-                            $"驚人速通！你竟然還剩餘 {timeLeft} 秒！\n\n是否接受終極隱藏關卡 (10 x 10) 的挑戰？",
-                            "⚡ 隱藏挑戰觸發 ⚡",
-                            MessageBoxButtons.YesNo,
-                            MessageBoxIcon.Warning
-                        );
-
-                        if (result == DialogResult.Yes)
-                        {
-                            StartLevel(4); // 載入隱藏關卡
-                        }
-                        else
-                        {
-                            PlaySound("game_clear");
-                            MessageBox.Show("太強了！你成功完成挑戰，完美破關！", "遊戲結束");
-                        }
+                        PlaySound("surprise");
+                        ShowEndGamePanel(true, $"恭喜通關成功！\n總剩餘時間：{timeLeft} 秒\n榮譽稱號：【🏆 傳奇記憶大師】\n\n是否接受終極隱藏關卡 (10 x 10) 的挑戰？", allowSecret: true);
                     }
                     else
                     {
                         PlaySound("game_clear");
-                        MessageBox.Show("恭喜你完美通關！", "遊戲結束");
+                        ShowEndGamePanel(true, $"恭喜通關成功！\n總剩餘時間：{timeLeft} 秒\n榮譽稱號：【🎖️ 高級記憶精英】\n\n(※ 提示：通關剩餘時間大於 200 秒能開啟隱藏關卡喔！)", allowSecret: false);
                     }
                 }
                 else if (currentLevel == 4)
                 {
                     PlaySound("game_clear");
-                    MessageBox.Show($"神之操作！你成功征服了 10 x 10 終極隱藏關卡！\n總共花費時間：{timeLeft} 秒！你就是記憶之王！", "神話誕生");
+                    ShowEndGamePanel(true, $"👑 神之操作！\n你成功征服了 10 x 10 終極魔王隱藏關卡！\n總共花費時間：{timeLeft} 秒！\n榮譽稱號：【宇宙級·過目不忘真神】", allowSecret: false);
                 }
             }
         }
+        #endregion
 
         private void btnRestart_Click(object sender, EventArgs e)
         {
+            pnlWelcome.Visible = false;
+            pnlGameOver.Visible = false;
             this.Text = "記憶翻牌小遊戲";
-            StartLevel(1); // 重新從第一關開始挑戰
+            StartLevel(1);
         }
 
+        #region 結束介面
+        private void ShowEndGamePanel(bool isWin, string message, bool allowSecret = false)
+        {
+            pnlGameOver.BringToFront(); // 移到最上層
+            pnlGameOver.Visible = true;
+
+            lblOverTitle.Text = "🏆CHALLENGE CLEAR!🏆\n通關成功";
+            lblOverTitle.ForeColor = Color.White;
+            pnlGameOver.BackColor = Color.LightBlue;
+
+            lblOverResult.Text = message;
+
+            btnOverExit.Visible = true;
+            btnOverRetry.Visible = true;
+            btnOverSecret.Visible = allowSecret; // 只有達成特殊條件的常規大結局才會亮起！
+        }
+
+        private void btnOverExit_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
+        }
+
+        private void btnOverRetry_Click(object sender, EventArgs e)
+        {
+            pnlGameOver.Visible = false;
+            this.Text = "記憶翻牌小遊戲";
+            StartLevel(1);
+        }
+
+        private void btnOverSecret_Click(object sender, EventArgs e)
+        {
+            pnlGameOver.Visible = false;
+            StartLevel(4);
+        }
+        #endregion
+
+        #region 音檔
         private void PlaySound(string soundName)
         {
             try
             {
                 string filePath = "";
-
-                // 如果這個音檔還沒有被釋放到暫存區，先執行一次釋放
                 if (!soundPathCache.ContainsKey(soundName))
                 {
                     byte[] soundBytes = null;
@@ -341,6 +423,39 @@ namespace MemoryGame
             }
         }
 
+        private void PreloadAllSounds(string[] soundNames)
+        {
+            foreach (string name in soundNames)
+            {
+                try
+                {
+                    if (!soundPathCache.ContainsKey(name))
+                    {
+                        byte[] soundBytes = null;
+                        System.IO.Stream str = (System.IO.Stream)Properties.Resources.ResourceManager.GetObject(name);
+                        if (str != null)
+                        {
+                            using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
+                            {
+                                str.CopyTo(ms);
+                                soundBytes = ms.ToArray();
+                            }
+                        }
+
+                        if (soundBytes != null)
+                        {
+                            string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), name + "_" + this.GetHashCode() + ".wav");
+                            System.IO.File.WriteAllBytes(tempPath, soundBytes);
+                            soundPathCache[name] = tempPath;
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+        #endregion
+
+        #region 關閉視窗
         private void frmMemoryGame_FormClosing(object sender, FormClosingEventArgs e)
         {
             // 遊戲關閉時把暫存的音檔砍掉
@@ -356,5 +471,15 @@ namespace MemoryGame
                 catch { }
             }
         }
+        #endregion
+
+        #region 修改進度條顏色的底層方法
+        public static class NativeMethods
+        {
+            [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+
+            public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wparam, IntPtr lparam);
+        }
+        #endregion
     }
 }

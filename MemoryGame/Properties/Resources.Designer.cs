@@ -591,6 +591,15 @@ namespace MemoryGame.Properties {
         /// <summary>
         ///   查詢類似 System.IO.MemoryStream 的類型 System.IO.UnmanagedMemoryStream 當地語系化資源。
         /// </summary>
+        internal static System.IO.UnmanagedMemoryStream game_fail {
+            get {
+                return ResourceManager.GetStream("game_fail", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   查詢類似 System.IO.MemoryStream 的類型 System.IO.UnmanagedMemoryStream 當地語系化資源。
+        /// </summary>
         internal static System.IO.UnmanagedMemoryStream match_fail {
             get {
                 return ResourceManager.GetStream("match_fail", resourceCulture);
@@ -612,6 +621,15 @@ namespace MemoryGame.Properties {
         internal static System.IO.UnmanagedMemoryStream next_level {
             get {
                 return ResourceManager.GetStream("next_level", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   查詢類似 System.IO.MemoryStream 的類型 System.IO.UnmanagedMemoryStream 當地語系化資源。
+        /// </summary>
+        internal static System.IO.UnmanagedMemoryStream surprise {
+            get {
+                return ResourceManager.GetStream("surprise", resourceCulture);
             }
         }
     }
